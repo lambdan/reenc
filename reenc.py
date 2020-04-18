@@ -108,14 +108,16 @@ for dirname, subname, filename in os.walk(input_path):
 	for f in filename:
 		if not f.lower().startswith('.') and f.lower().endswith(VALID_VIDEO_EXTENSIONS):
 
+			# check if we should skip because we already processed it
+			if '[x265-reenc]' in f: # bitrate checks would catch ourselves too, but just checking the filename is faster
+				print('Skipping because it has [x265-reenc] in its filename:',f)
+				continue
+
 			fpath = os.path.abspath(os.path.join(dirname,f))
 			#print(fpath)
 			probe = json.loads(subprocess.check_output(['ffprobe', '-show_format', '-show_streams', '-loglevel', 'quiet', '-print_format', 'json', fpath]))
 
-			# check if we should skip
-			if '[x265-reenc]' in f: # bitrate checks would catch ourselves too, but just checking the filename is faster
-				print('Skipping because it has [x265-reenc] in its filename:',f)
-				continue
+			# check if we should skip due to video properties
 			if get_info(probe, 'v_bitrate_kbits') <= minimum_video_bitrate: # low bitrate
 				print('Skipping because bitrate is too low:',f)
 				continue
