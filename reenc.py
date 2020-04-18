@@ -129,16 +129,16 @@ for dirname, subname, filename in os.walk(input_path):
 				continue
 
 			# verify target bitrate will be lower than source bitrate
-			if get_info(probe, 'height') <= 480 and get_info(probe, 'v_bitrate_kbits') <= target_480p:
+			if get_info(probe, 'height') == 480 and get_info(probe, 'v_bitrate_kbits') <= target_480p:
 				print('Skipping because source bitrate (' + str(get_info(probe, 'v_bitrate_kbits')) + ') is less than target bitrate (' + str(target_480p) + '):',f)
 				continue
-			if get_info(probe, 'height') <= 720 and get_info(probe, 'v_bitrate_kbits') <= target_720p:
+			elif get_info(probe, 'height') == 720 and get_info(probe, 'v_bitrate_kbits') <= target_720p:
 				print('Skipping because source bitrate (' + str(get_info(probe, 'v_bitrate_kbits')) + ') is less than target bitrate (' + str(target_720p) + '):',f)
 				continue
-			if get_info(probe, 'height') <= 1080 and get_info(probe, 'v_bitrate_kbits') <= target_1080p:
+			elif get_info(probe, 'height') == 1080 and get_info(probe, 'v_bitrate_kbits') <= target_1080p:
 				print('Skipping because source bitrate (' + str(get_info(probe, 'v_bitrate_kbits')) + ') is less than target bitrate (' + str(target_1080p) + '):',f)
 				continue
-			if get_info(probe, 'height') <= 2160 and get_info(probe, 'v_bitrate_kbits') <= target_2160p:
+			elif get_info(probe, 'height') == 2160 and get_info(probe, 'v_bitrate_kbits') <= target_2160p:
 				print('Skipping because source bitrate (' + str(get_info(probe, 'v_bitrate_kbits')) + ') is less than target bitrate (' + str(target_2160p) + '):',f)
 				continue
 
