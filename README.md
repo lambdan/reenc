@@ -3,7 +3,7 @@
 
 # Requirements
 
-- [other-transcode-](https://github.com/donmelton/other_video_transcoding)
-- [ffmpeg](https://ffmpeg.zeranoe.com/builds/)
+- [other-transcode](https://github.com/donmelton/other_video_transcoding)
+- [ffmpeg & ffprobe](https://ffmpeg.zeranoe.com/builds/)
 - NVIDIA GPU with HEVC 10-bit encoding support (GTX 10XX+?)
 	- Unless you disable nvenc/10-bit and just use whatever you can use... (modify the `ot_settings` line)
