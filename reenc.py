@@ -105,16 +105,17 @@ def get_info(json, what):
 
 total_reduction = 0
 
-for dirname, subname, filename in os.walk(input_path):
-	for f in filename:
+for dirpath, dirnames, filenames in os.walk(input_path):
+	# remove ignored_folders # https://stackoverflow.com/a/38928455
+	for ig in ignored_folders:
+		if ig in dirnames:
+			#print("removing folder from walk",ig)
+			dirnames.remove(ig)
+	for f in filenames:
 		if not f.lower().startswith('.') and f.lower().endswith(VALID_VIDEO_EXTENSIONS):
 
-			fpath = os.path.abspath(os.path.join(dirname,f))
+			fpath = os.path.abspath(os.path.join(dirpath,f))
 			#print(fpath)
-			# check if folder is in ignored_folders
-			if os.path.basename(os.path.dirname(fpath)) in ignored_folders:
-				print('Skipping folder',os.path.basename(os.path.dirname(fpath)))
-				continue
 
 			# check if we should skip because we already processed it
 			if '[x265-reenc]' in f: # bitrate checks would catch ourselves too, but just checking the filename is faster
@@ -152,7 +153,7 @@ for dirname, subname, filename in os.walk(input_path):
 			#print("tempname",tempname)
 			basename = os.path.splitext(f)[0]
 			clean_name = "".join([c for c in basename if c.isalpha() or c.isdigit() or c in VALID_FILENAME_SYMBOLS]).rstrip()
-			outfile = os.path.abspath(os.path.join(dirname, clean_name + ' [x265-reenc].' + output_video_extension)) # actual resulting filename (and path)
+			outfile = os.path.abspath(os.path.join(dirpath, clean_name + ' [x265-reenc].' + output_video_extension)) # actual resulting filename (and path)
 
 			print('\nSource:',f)
 			print('\tVideo:',get_info(probe,'vresolution'), str(get_info(probe,'vfps')) + 'fps', get_info(probe, 'vcodec'), str(round(get_info(probe, 'v_bitrate_kbits'),0)) + 'kbps')
@@ -204,9 +205,9 @@ for dirname, subname, filename in os.walk(input_path):
 
 			# check if srt exists and copy and maybe even delete it
 			# TODO check for more languages instead of hardcoding the .swe.srt part... probably a regex like *.***.srt
-			srt_path = os.path.abspath(os.path.join(dirname, basename + '.swe.srt'))
+			srt_path = os.path.abspath(os.path.join(dirpath, basename + '.swe.srt'))
 			if os.path.isfile(srt_path):
-				new_srt_path = os.path.abspath(os.path.join(dirname, clean_name + ' [x265-reenc].swe.srt'))
+				new_srt_path = os.path.abspath(os.path.join(dirpath, clean_name + ' [x265-reenc].swe.srt'))
 				print('Copying SRT:', srt_path, '-->', new_srt_path)
 				shutil.copy(srt_path, new_srt_path)
 				if delete_original:
