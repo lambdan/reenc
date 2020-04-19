@@ -8,6 +8,7 @@ import datetime
 
 delete_original = False # if True, source files will be deleted! dangerous!!!
 input_path = 'Z:/Video/' # folder with videos to batch through (also goes through subfolders)
+ignored_folders = ['_Incoming']
 minimum_video_bitrate = 4000 # videos with lower/equal bitrate to this will be skipped (kbps)
 minimum_video_height = 720 # videos with lower/equal resolution to this will be skipped
 ot = os.path.abspath(os.path.join('C:/Ruby27-x64/bin', 'other-transcode.bat')) # path to other-transcode.bat (Windows is great, isn't it).. on unix i think you can just change this line to ` ot = 'other-transcode' ` ?
@@ -108,13 +109,18 @@ for dirname, subname, filename in os.walk(input_path):
 	for f in filename:
 		if not f.lower().startswith('.') and f.lower().endswith(VALID_VIDEO_EXTENSIONS):
 
+			fpath = os.path.abspath(os.path.join(dirname,f))
+			#print(fpath)
+			# check if folder is in ignored_folders
+			if os.path.basename(os.path.dirname(fpath)) in ignored_folders:
+				print('Skipping folder',os.path.basename(os.path.dirname(fpath)))
+				continue
+
 			# check if we should skip because we already processed it
 			if '[x265-reenc]' in f: # bitrate checks would catch ourselves too, but just checking the filename is faster
 				print('Skipping because it has [x265-reenc] in its filename:',f)
 				continue
 
-			fpath = os.path.abspath(os.path.join(dirname,f))
-			#print(fpath)
 			probe = json.loads(subprocess.check_output(['ffprobe', '-show_format', '-show_streams', '-loglevel', 'quiet', '-print_format', 'json', fpath]))
 
 			# check if we should skip due to video properties
