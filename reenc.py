@@ -8,7 +8,8 @@ import datetime
 
 delete_original = False # if True, source files will be deleted! dangerous!!!
 input_path = 'Z:/Video/' # folder with videos to batch through (also goes through subfolders)
-ignored_folders = ['_Incoming']
+output_path = 'same' # converted videos saved here. set to "same" to put them in the same folder as input.
+ignored_folders = ['_Incoming'] # ignore these folders in the input_path
 minimum_video_bitrate = 4000 # videos with lower/equal bitrate to this will be skipped (kbps)
 minimum_video_height = 720 # videos with lower/equal resolution to this will be skipped
 ot = os.path.abspath(os.path.join('C:/Ruby27-x64/bin', 'other-transcode.bat')) # path to other-transcode.bat (Windows is great, isn't it).. on unix i think you can just change this line to ` ot = 'other-transcode' ` ?
@@ -26,10 +27,9 @@ VALID_FILENAME_SYMBOLS = [',', '.', '[', ']', ' ', '(', ')', '-', '_']
 
 # end of settings
 
-
-
-print ('*** Settings ***')
+# show settings
 print ('Folder to process:', input_path)
+print ('Output folder:', output_path)
 print ('Delete original:', delete_original)
 print ('Minimum bitrate:', minimum_video_bitrate)
 print ('Minimum video resolution:', minimum_video_height)
@@ -89,7 +89,10 @@ def get_info(json, what):
 		try:
 			return int(get_stream(json, 'audio')['bit_rate'])/1000
 		except:
-			return 99999999999
+			try:
+				return int(get_stream(json, 'audio')['tags']["BPS"])/1000
+			except:
+				return 99999999
 
 	if what == 'width': # 1920 etc.
 		return int(get_stream(json, 'video')['width'])
@@ -101,7 +104,10 @@ def get_info(json, what):
 		try:
 			return int(get_stream(json, 'video')['bit_rate'])/1000
 		except:
-			return 99999999999
+			try:
+				return int(get_stream(json, 'video')['tags']["BPS"])/1000
+			except:
+				return 99999999
 
 total_reduction = 0
 
@@ -114,7 +120,7 @@ for dirpath, dirnames, filenames in os.walk(input_path):
 	for f in filenames:
 		if not f.lower().startswith('.') and f.lower().endswith(VALID_VIDEO_EXTENSIONS):
 
-			fpath = os.path.abspath(os.path.join(dirpath,f))
+			fpath = os.path.abspath(os.path.join(dirpath,f)) # input file path
 			#print(fpath)
 
 			# check if we should skip because we already processed it
@@ -122,6 +128,15 @@ for dirpath, dirnames, filenames in os.walk(input_path):
 				print('Skipping because it has [x265-reenc] in its filename:',f)
 				continue
 
+			# decide output path
+			if output_path.lower() == "same":
+				outpath = dirpath # same folder as input
+			else:
+				outpath = os.path.abspath(output_path)
+				if not os.path.isdir(outpath):
+					os.makedirs(outpath)
+
+			# use ffprobe to get info about video
 			probe = json.loads(subprocess.check_output(['ffprobe', '-show_format', '-show_streams', '-loglevel', 'quiet', '-print_format', 'json', fpath]))
 
 			# check if we should skip due to video properties
@@ -151,9 +166,20 @@ for dirpath, dirnames, filenames in os.walk(input_path):
 
 			tempname = 'reenc_temp_' + md5_string(fpath) + '.' + output_video_extension # file ffmpeg writes to 
 			#print("tempname",tempname)
+			# check for old tempfile and remove it
+			if os.path.isfile(tempname):
+				print('Removing leftover tempfile...')
+				os.remove(tempname)
+
+
 			basename = os.path.splitext(f)[0]
 			clean_name = "".join([c for c in basename if c.isalpha() or c.isdigit() or c in VALID_FILENAME_SYMBOLS]).rstrip()
-			outfile = os.path.abspath(os.path.join(dirpath, clean_name + ' [x265-reenc].' + output_video_extension)) # actual resulting filename (and path)
+			outfile = os.path.abspath(os.path.join(outpath, clean_name + ' [x265-reenc].' + output_video_extension)) # actual resulting filename (and path)
+
+			# check if outfile already exist, skip if so
+			if os.path.isfile(outfile):
+				print("Skipping",f,"because output already exists:",outfile)
+				continue
 
 			print('\nSource:',f)
 			print('\tVideo:',get_info(probe,'vresolution'), str(get_info(probe,'vfps')) + 'fps', get_info(probe, 'vcodec'), str(round(get_info(probe, 'v_bitrate_kbits'),0)) + 'kbps')
@@ -173,7 +199,7 @@ for dirpath, dirnames, filenames in os.walk(input_path):
 			ot_cmd.extend(additional)
 			if output_video_extension == 'mp4' and '--mp4' not in ot_cmd:
 				ot_cmd.append('--mp4')
-			print(ot_cmd)
+			#print(ot_cmd)
 			
 			# call other-transcode and mangle the resulting ffmpeg command
 			s = subprocess.check_output(ot_cmd).decode('utf8')
@@ -207,7 +233,7 @@ for dirpath, dirnames, filenames in os.walk(input_path):
 			# TODO check for more languages instead of hardcoding the .swe.srt part... probably a regex like *.***.srt
 			srt_path = os.path.abspath(os.path.join(dirpath, basename + '.swe.srt'))
 			if os.path.isfile(srt_path):
-				new_srt_path = os.path.abspath(os.path.join(dirpath, clean_name + ' [x265-reenc].swe.srt'))
+				new_srt_path = os.path.abspath(os.path.join(outpath, clean_name + ' [x265-reenc].swe.srt'))
 				print('Copying SRT:', srt_path, '-->', new_srt_path)
 				shutil.copy(srt_path, new_srt_path)
 				if delete_original:
