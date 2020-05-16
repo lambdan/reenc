@@ -1,8 +1,9 @@
-import sys, os, shutil
+import sys, os, shutil, re
 import subprocess
 import json
 import hashlib
 import datetime
+from subprocess import DEVNULL
 
 # settings !
 
@@ -52,7 +53,7 @@ def md5_string(string):
 	hash_object = hashlib.md5(string.encode())
 	return hash_object.hexdigest()
 
-def get_info(json, what):
+def get_info(json, ot_scan, what):
 	# json should be from ffprobe
 	if what == 'duration_HHMMSSXXX':
 		secs = float(json['format']['duration'])
@@ -86,13 +87,13 @@ def get_info(json, what):
 		return int(get_stream(json, 'audio')['channels'])
 
 	if what == 'a_bitrate_kbits': # audio bitrate in kbit
-		try:
-			return int(get_stream(json, 'audio')['bit_rate'])/1000
-		except:
-			try:
-				return int(get_stream(json, 'audio')['tags']["BPS"])/1000
-			except:
-				return 99999999
+		for l in ot_scan.split('\n'):
+			if "channel" in l and "Kbps" in l: # find audio line
+				s = l.split('/')
+				for a in s:
+					if 'Kbps' in a:
+						only_numbers = int(re.sub("[^0-9]", "", a)) # https://stackoverflow.com/a/1249424
+						return only_numbers
 
 	if what == 'width': # 1920 etc.
 		return int(get_stream(json, 'video')['width'])
@@ -101,13 +102,13 @@ def get_info(json, what):
 		return int(get_stream(json, 'video')['height'])
 
 	if what == 'v_bitrate_kbits': # video bitrate in kbit
-		try:
-			return int(get_stream(json, 'video')['bit_rate'])/1000
-		except:
-			try:
-				return int(get_stream(json, 'video')['tags']["BPS"])/1000
-			except:
-				return 99999999
+		for l in ot_scan.split('\n'):
+			if "fps" in l and "Kbps" in l: # find video line
+				s = l.split('/')
+				for a in s:
+					if 'Kbps' in a:
+						only_numbers = int(re.sub("[^0-9]", "", a)) # https://stackoverflow.com/a/1249424
+						return only_numbers
 
 total_reduction = 0
 
@@ -136,32 +137,33 @@ for dirpath, dirnames, filenames in os.walk(input_path):
 				if not os.path.isdir(outpath):
 					os.makedirs(outpath)
 
-			# use ffprobe to get info about video
+			# use ffprobe and other_transcode's --scan to get info about video
 			probe = json.loads(subprocess.check_output(['ffprobe', '-show_format', '-show_streams', '-loglevel', 'quiet', '-print_format', 'json', fpath]))
+			ot_scan = subprocess.check_output([ot, '--scan', fpath],stderr=DEVNULL).decode() # removing stderr hides "Verying ffmpeg availaility..." messages from other-transcode
 
 			# check if we should skip due to video properties
-			if get_info(probe, 'v_bitrate_kbits') <= minimum_video_bitrate: # low bitrate
+			if get_info(probe, ot_scan, 'v_bitrate_kbits') <= minimum_video_bitrate: # low bitrate
 				print('Skipping because bitrate is too low:',f)
 				continue
-			if get_info(probe, 'height') <= minimum_video_height:
+			if get_info(probe, ot_scan, 'height') <= minimum_video_height:
 				print('Skipping because resolution is too low:',f)
 				continue
-			if get_info(probe, 'vcodec') == 'hevc':
+			if get_info(probe, ot_scan, 'vcodec') == 'hevc':
 				print('Skipping because its already hevc:',f)
 				continue
 
 			# verify target bitrate will be lower than source bitrate
-			if get_info(probe, 'height') == 480 and get_info(probe, 'v_bitrate_kbits') <= target_480p:
-				print('Skipping because source bitrate (' + str(get_info(probe, 'v_bitrate_kbits')) + ') is less than target bitrate (' + str(target_480p) + '):',f)
+			if get_info(probe, ot_scan, 'height') == 480 and get_info(probe, ot_scan, 'v_bitrate_kbits') <= target_480p:
+				print('Skipping because source bitrate (' + str(get_info(probe, ot_scan, 'v_bitrate_kbits')) + ') is less than target bitrate (' + str(target_480p) + '):',f)
 				continue
-			elif get_info(probe, 'height') == 720 and get_info(probe, 'v_bitrate_kbits') <= target_720p:
-				print('Skipping because source bitrate (' + str(get_info(probe, 'v_bitrate_kbits')) + ') is less than target bitrate (' + str(target_720p) + '):',f)
+			elif get_info(probe, ot_scan, 'height') == 720 and get_info(probe, ot_scan, 'v_bitrate_kbits') <= target_720p:
+				print('Skipping because source bitrate (' + str(get_info(probe, ot_scan, 'v_bitrate_kbits')) + ') is less than target bitrate (' + str(target_720p) + '):',f)
 				continue
-			elif get_info(probe, 'height') == 1080 and get_info(probe, 'v_bitrate_kbits') <= target_1080p:
-				print('Skipping because source bitrate (' + str(get_info(probe, 'v_bitrate_kbits')) + ') is less than target bitrate (' + str(target_1080p) + '):',f)
+			elif get_info(probe, ot_scan, 'height') == 1080 and get_info(probe, ot_scan, 'v_bitrate_kbits') <= target_1080p:
+				print('Skipping because source bitrate (' + str(get_info(probe, ot_scan, 'v_bitrate_kbits')) + ') is less than target bitrate (' + str(target_1080p) + '):',f)
 				continue
-			elif get_info(probe, 'height') == 2160 and get_info(probe, 'v_bitrate_kbits') <= target_2160p:
-				print('Skipping because source bitrate (' + str(get_info(probe, 'v_bitrate_kbits')) + ') is less than target bitrate (' + str(target_2160p) + '):',f)
+			elif get_info(probe, ot_scan, 'height') == 2160 and get_info(probe, ot_scan, 'v_bitrate_kbits') <= target_2160p:
+				print('Skipping because source bitrate (' + str(get_info(probe, ot_scan, 'v_bitrate_kbits')) + ') is less than target bitrate (' + str(target_2160p) + '):',f)
 				continue
 
 			tempname = 'reenc_temp_' + md5_string(fpath) + '.' + output_video_extension # file ffmpeg writes to 
@@ -182,12 +184,12 @@ for dirpath, dirnames, filenames in os.walk(input_path):
 				continue
 
 			print('\nSource:',f)
-			print('\tVideo:',get_info(probe,'vresolution'), str(get_info(probe,'vfps')) + 'fps', get_info(probe, 'vcodec'), str(round(get_info(probe, 'v_bitrate_kbits'),0)) + 'kbps')
-			print('\tAudio:',get_info(probe, 'acodec'), str(get_info(probe,'achannels')) + 'ch', str(round(get_info(probe, 'a_bitrate_kbits'),0)) + 'kbps')
-			print('\tDuration:',get_info(probe,'duration_HHMMSSXXX'))
-			print('\tSize:',str(round(get_info(probe, 'sizeMB'),1)) + ' MB')
+			print('\tVideo:',get_info(probe,ot_scan, 'vresolution'), str(get_info(probe,ot_scan, 'vfps')) + 'fps', get_info(probe, ot_scan, 'vcodec'), str(round(get_info(probe,ot_scan,  'v_bitrate_kbits'),0)) + 'kbps')
+			print('\tAudio:',get_info(probe,ot_scan,  'acodec'), str(get_info(probe,ot_scan, 'achannels')) + 'ch', str(round(get_info(probe, ot_scan, 'a_bitrate_kbits'),0)) + 'kbps')
+			print('\tDuration:',get_info(probe,ot_scan, 'duration_HHMMSSXXX'))
+			print('\tSize:',str(round(get_info(probe,ot_scan,  'sizeMB'),1)) + ' MB')
 
-			size_before = get_info(probe, 'sizeMB')
+			size_before = get_info(probe, ot_scan, 'sizeMB')
 
 			# prepare other-transcode command
 			ot_cmd = [ot, '-n', fpath] # -n for dry-run so we can capture the command
@@ -202,7 +204,7 @@ for dirpath, dirnames, filenames in os.walk(input_path):
 			#print(ot_cmd)
 			
 			# call other-transcode and mangle the resulting ffmpeg command
-			s = subprocess.check_output(ot_cmd).decode('utf8')
+			s = subprocess.check_output(ot_cmd,stderr=DEVNULL).decode('utf8')
 			if s.startswith('ffmpeg'): # we capture the ffmpeg command so we can replace the output name
 				#print('before:',s)
 				if ' ' in f:
@@ -220,7 +222,8 @@ for dirpath, dirnames, filenames in os.walk(input_path):
 
 			# get new size reduction
 			probe = json.loads(subprocess.check_output(['ffprobe', '-show_format', '-show_streams', '-loglevel', 'quiet', '-print_format', 'json', tempname]))
-			size_after = get_info(probe, 'sizeMB')
+			ot_scan = subprocess.check_output([ot, '--scan', tempname],stderr=DEVNULL).decode()
+			size_after = get_info(probe,ot_scan,  'sizeMB')
 			size_reduction = size_before - size_after
 			print('New size:', round(size_after,1), 'MB (Before:', round(size_before,1), 'MB)')
 			total_reduction += size_reduction
