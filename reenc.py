@@ -94,6 +94,7 @@ def get_info(json, ot_scan, what):
 					if 'Kbps' in a:
 						only_numbers = int(re.sub("[^0-9]", "", a)) # https://stackoverflow.com/a/1249424
 						return only_numbers
+						# TODO backup audio bitrate like video bitrate
 
 	if what == 'width': # 1920 etc.
 		return int(get_stream(json, 'video')['width'])
@@ -109,6 +110,12 @@ def get_info(json, ot_scan, what):
 					if 'Kbps' in a:
 						only_numbers = int(re.sub("[^0-9]", "", a)) # https://stackoverflow.com/a/1249424
 						return only_numbers
+			elif "fps" in l and not "Kbps" in l: # figure bitrate dirty way by dividing size with length
+				secs = float(json['format']['duration'])
+				size = int(json['format']['size'])
+				result = ((size/secs)*8)/1000 # (MB/secs) * 8 to get bits, then /1000 to get Kbit
+				result -= get_info(json, ot_scan, 'a_bitrate_kbits') # remove audio bitrate
+				return int(result)
 
 total_reduction = 0
 
@@ -120,6 +127,7 @@ for dirpath, dirnames, filenames in os.walk(input_path):
 			dirnames.remove(ig)
 	for f in filenames:
 		if not f.lower().startswith('.') and f.lower().endswith(VALID_VIDEO_EXTENSIONS):
+			#print(f)
 
 			fpath = os.path.abspath(os.path.join(dirpath,f)) # input file path
 			#print(fpath)
@@ -143,11 +151,12 @@ for dirpath, dirnames, filenames in os.walk(input_path):
 
 			# check if we should skip due to video properties
 			if get_info(probe, ot_scan, 'v_bitrate_kbits') <= minimum_video_bitrate: # low bitrate
-				print('Skipping because bitrate is too low:',f)
+				print('Skipping because bitrate is too low:',f, '(' + str(get_info(probe, ot_scan, 'v_bitrate_kbits')) + ' <= ' + str(minimum_video_bitrate) + ')')
 				continue
 			if get_info(probe, ot_scan, 'height') <= minimum_video_height:
 				print('Skipping because resolution is too low:',f)
 				continue
+
 			if get_info(probe, ot_scan, 'vcodec') == 'hevc':
 				print('Skipping because its already hevc:',f)
 				continue
