@@ -150,13 +150,12 @@ for dirpath, dirnames, filenames in os.walk(input_path):
 			ot_scan = subprocess.check_output([ot, '--scan', fpath],stderr=DEVNULL).decode() # removing stderr hides "Verying ffmpeg availaility..." messages from other-transcode
 
 			# check if we should skip due to video properties
+			if get_info(probe, ot_scan, 'height') <= minimum_video_height:
+				print('Skipping because resolution is too low:',f, '(' + str(get_info(probe, ot_scan, 'height')) + 'p <= ' + str(minimum_video_height) + 'p)')
+				continue
 			if get_info(probe, ot_scan, 'v_bitrate_kbits') <= minimum_video_bitrate: # low bitrate
 				print('Skipping because bitrate is too low:',f, '(' + str(get_info(probe, ot_scan, 'v_bitrate_kbits')) + ' <= ' + str(minimum_video_bitrate) + ')')
 				continue
-			if get_info(probe, ot_scan, 'height') <= minimum_video_height:
-				print('Skipping because resolution is too low:',f)
-				continue
-
 			if get_info(probe, ot_scan, 'vcodec') == 'hevc':
 				print('Skipping because its already hevc:',f)
 				continue
