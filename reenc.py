@@ -88,7 +88,7 @@ def get_info(json, ot_scan, what):
 
 	if what == 'a_bitrate_kbits': # audio bitrate in kbit
 		for l in ot_scan.split('\n'):
-			if "channel" in l and "Kbps" in l: # find audio line
+			if not 'fps' in l and 'Kbps' in l: # find audio line
 				s = l.split('/')
 				for a in s:
 					if 'Kbps' in a:
