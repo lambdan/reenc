@@ -16,6 +16,7 @@ minimum_video_height = 720 # videos with lower/equal resolution to this will be 
 ot = os.path.abspath(os.path.join('C:/Ruby27-x64/bin', 'other-transcode.bat')) # path to other-transcode.bat (Windows is great, isn't it).. on unix i think you can just change this line to ` ot = 'other-transcode' ` ?
 ot_settings = '--crop auto --nvenc --10-bit --hevc' # these are passed to other-transcode
 output_video_extension = 'mp4' # mp4 or mkv
+subtitle_languages = ["swe", "eng", "sv", "en"]
 
 # target video bitrates in kbps
 target_480p = 500
@@ -36,6 +37,7 @@ print ('Minimum bitrate:', minimum_video_bitrate)
 print ('Minimum video resolution:', minimum_video_height)
 print ('Additional other-transcode settings:', ot_settings)
 print ('Video extension for output:', output_video_extension)
+print ('Subtitles to copy:', subtitle_languages)
 print ('Target video bitrates:')
 print ('\t480p:', target_480p)
 print ('\t720p:', target_720p)
@@ -242,16 +244,17 @@ for dirpath, dirnames, filenames in os.walk(input_path):
 
 			# check if srt exists and copy and maybe even delete it
 			# TODO check for more languages instead of hardcoding the .swe.srt part... probably a regex like *.***.srt
-			srt_path = os.path.abspath(os.path.join(dirpath, basename + '.swe.srt'))
-			if os.path.isfile(srt_path):
-				new_srt_path = os.path.abspath(os.path.join(outpath, clean_name + ' [x265-reenc].swe.srt'))
-				print('Copying SRT:', srt_path, '-->', new_srt_path)
-				shutil.copy(srt_path, new_srt_path)
-				if delete_original:
-					print('Deleting original SRT:',srt_path)
-					os.remove(srt_path)
-			else:
-				print('No SRT found.')
+			for lang in subtitle_languages:
+				srt_path = os.path.abspath(os.path.join(dirpath, basename + '.' + lang + '.srt'))
+				if os.path.isfile(srt_path):
+					new_srt_path = os.path.abspath(os.path.join(outpath, clean_name + ' [x265-reenc].' + lang + '.srt'))
+					print('Copying SRT:', srt_path, '-->', new_srt_path)
+					shutil.copy(srt_path, new_srt_path)
+					if delete_original:
+						print('Deleting original SRT:',srt_path)
+						os.remove(srt_path)
+				else:
+					print('No SRT for ' + lang + ' found.')
 
 			# delete original file?
 			if delete_original:
