@@ -4,6 +4,7 @@ import json
 import hashlib
 import datetime
 from subprocess import DEVNULL
+from curses import ascii # pip3 install windows-curses
 
 # settings !
 
@@ -17,6 +18,7 @@ ot = os.path.abspath(os.path.join('C:/Ruby27-x64/bin', 'other-transcode.bat')) #
 ot_settings = '--crop auto --nvenc --10-bit --hevc' # these are passed to other-transcode
 output_video_extension = 'mp4' # mp4 or mkv
 subtitle_languages = ["swe", "eng", "sv", "en"]
+skipped_db = 'reenc_skipped.txt'
 
 # target video bitrates in kbps
 target_480p = 500
@@ -38,6 +40,7 @@ print ('Minimum video resolution:', minimum_video_height)
 print ('Additional other-transcode settings:', ot_settings)
 print ('Video extension for output:', output_video_extension)
 print ('Subtitles to copy:', subtitle_languages)
+print ('Skip db:', skipped_db)
 print ('Target video bitrates:')
 print ('\t480p:', target_480p)
 print ('\t720p:', target_720p)
@@ -54,6 +57,14 @@ def get_stream(json, which):
 def md5_string(string):
 	hash_object = hashlib.md5(string.encode())
 	return hash_object.hexdigest()
+
+def xml_clean(text): # https://stackoverflow.com/a/20819845
+	return str(''.join(ascii.isprint(c) and c or '' for c in text)) 
+
+def skip_file(fp, reason):
+	# fp = full file path, reason = reason
+	with open(skipped_db, 'a') as sf:
+		sf.write(str(xml_clean(fp)) + ': ' + reason + ' | ' + md5_string(fpath) + '\n')
 
 def get_info(json, ot_scan, what):
 	# json should be from ffprobe
@@ -120,6 +131,17 @@ def get_info(json, ot_scan, what):
 				return int(result)
 
 total_reduction = 0
+skipped_files = []
+
+# Read previously skipped files
+if os.path.isfile(skipped_db):
+	print("Reading skipped files from",skipped_db)
+	print("If you want to start clean just remove the file:", skipped_db)
+	with open(skipped_db) as f:
+		lines = f.readlines()
+	for line in lines:
+		skipped_files.append(line.rstrip().split(' | ')[1])
+	print("Read", len(skipped_files),"skipped files from",skipped_db)
 
 for dirpath, dirnames, filenames in os.walk(input_path):
 	# remove ignored_folders # https://stackoverflow.com/a/38928455
@@ -128,15 +150,16 @@ for dirpath, dirnames, filenames in os.walk(input_path):
 			#print("removing folder from walk",ig)
 			dirnames.remove(ig)
 	for f in filenames:
+		fpath = os.path.abspath(os.path.join(dirpath,f)) # input file path
+		if md5_string(fpath) in skipped_files:
+			#print("skipping becasue it was in skip db",f)
+			continue
 		if not f.lower().startswith('.') and f.lower().endswith(VALID_VIDEO_EXTENSIONS):
-			#print(f)
-
-			fpath = os.path.abspath(os.path.join(dirpath,f)) # input file path
-			#print(fpath)
 
 			# check if we should skip because we already processed it
 			if '[x265-reenc]' in f: # bitrate checks would catch ourselves too, but just checking the filename is faster
 				print('Skipping because it has [x265-reenc] in its filename:',f)
+				skip_file(fpath,'x265-reenc in filename')
 				continue
 
 			# decide output path
@@ -154,26 +177,33 @@ for dirpath, dirnames, filenames in os.walk(input_path):
 			# check if we should skip due to video properties
 			if get_info(probe, ot_scan, 'height') <= minimum_video_height:
 				print('Skipping because resolution is too low:',f, '(' + str(get_info(probe, ot_scan, 'height')) + 'p <= ' + str(minimum_video_height) + 'p)')
+				skip_file(fpath,'resolution too low')
 				continue
 			if get_info(probe, ot_scan, 'v_bitrate_kbits') <= minimum_video_bitrate: # low bitrate
 				print('Skipping because bitrate is too low:',f, '(' + str(get_info(probe, ot_scan, 'v_bitrate_kbits')) + ' <= ' + str(minimum_video_bitrate) + ')')
+				skip_file(fpath,'bitrate too low')
 				continue
 			if get_info(probe, ot_scan, 'vcodec') == 'hevc':
 				print('Skipping because its already hevc:',f)
+				skip_file(fpath,'already hevc')
 				continue
 
 			# verify target bitrate will be lower than source bitrate
 			if get_info(probe, ot_scan, 'height') == 480 and get_info(probe, ot_scan, 'v_bitrate_kbits') <= target_480p:
 				print('Skipping because source bitrate (' + str(get_info(probe, ot_scan, 'v_bitrate_kbits')) + ') is less than target bitrate (' + str(target_480p) + '):',f)
+				skip_file(fpath,'source bitrate less than target (480p)')
 				continue
 			elif get_info(probe, ot_scan, 'height') == 720 and get_info(probe, ot_scan, 'v_bitrate_kbits') <= target_720p:
 				print('Skipping because source bitrate (' + str(get_info(probe, ot_scan, 'v_bitrate_kbits')) + ') is less than target bitrate (' + str(target_720p) + '):',f)
+				skip_file(fpath,'source bitrate less than target (720p)')
 				continue
 			elif get_info(probe, ot_scan, 'height') == 1080 and get_info(probe, ot_scan, 'v_bitrate_kbits') <= target_1080p:
 				print('Skipping because source bitrate (' + str(get_info(probe, ot_scan, 'v_bitrate_kbits')) + ') is less than target bitrate (' + str(target_1080p) + '):',f)
+				skip_file(fpath,'source bitrate less than target (1080p)')
 				continue
 			elif get_info(probe, ot_scan, 'height') == 2160 and get_info(probe, ot_scan, 'v_bitrate_kbits') <= target_2160p:
 				print('Skipping because source bitrate (' + str(get_info(probe, ot_scan, 'v_bitrate_kbits')) + ') is less than target bitrate (' + str(target_2160p) + '):',f)
+				skip_file(fpath,'source bitrate less than target (2160p)')
 				continue
 
 			tempname = 'reenc_temp_' + md5_string(fpath) + '.' + output_video_extension # file ffmpeg writes to 
@@ -191,6 +221,7 @@ for dirpath, dirnames, filenames in os.walk(input_path):
 			# check if outfile already exist, skip if so
 			if os.path.isfile(outfile):
 				print("Skipping",f,"because output already exists:",outfile)
+				# dont check if in skipped_files here because maybe user wants to re-encode
 				continue
 
 			print('\nSource:',f)
@@ -262,7 +293,10 @@ for dirpath, dirnames, filenames in os.walk(input_path):
 				os.remove(fpath)
 
 			print('Done with this video, saved', str(round(size_reduction,1)), 'MB (Total this session:',round(total_reduction,1),'MB)')
+			# add encoded video to future skips
+			skip_file(fpath,'encoded by reenc ' + str(datetime.datetime.now()))
 		else:
-			print('Skipping because it doesnt have a video extension:', f)	
+			print('Skipping because it doesnt have a video extension:', f)
+			skip_file(fpath, 'no video extension')
 
-print('\nAll done! Total size reduction this session:',round(total_reduction,1),'MB')
+print('\nDone with all transcoding! Total size reduction this session:',round(total_reduction,1),'MB')
