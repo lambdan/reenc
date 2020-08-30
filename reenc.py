@@ -108,6 +108,8 @@ def get_info(json, ot_scan, what):
 						only_numbers = int(re.sub("[^0-9]", "", a)) # https://stackoverflow.com/a/1249424
 						return only_numbers
 						# TODO backup audio bitrate like video bitrate
+		if get_info(json, ot_scan, 'acodec') == 'flac':
+			return 999
 
 	if what == 'width': # 1920 etc.
 		return int(get_stream(json, 'video')['width'])
